@@ -1,179 +1,291 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Jogo da Cobrinha</title>
+  <meta charset="utf-8"> <!-- Codificação de caracteres -->
+  <meta name="viewport" content="width=device-width, initial-scale=1"> <!-- Responsividade -->
+  <title>Jogo da Cobrinha (Snake)</title> <!-- Título da aba -->
+
   <style>
+    /* --- Estilos gerais --- */
     body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: linear-gradient(180deg, #071422 0%, #051718 100%);
-      color: #e6f4ea;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      margin:0; /* Remove margem padrão */
+      font-family:Arial; /* Fonte do texto */
+      background:linear-gradient(180deg,#071422 0%,#051718 100%); /* Gradiente de fundo */
+      color:#e6f4ea; /* Cor do texto */
+      height:100vh; /* Altura da tela */
+      display:flex; align-items:center; justify-content:center; /* Centraliza conteúdo */
     }
-    #container { display:flex; flex-direction:column; align-items:center; gap:12px; position: relative; }
-    #hud { display:flex; gap:20px; align-items:center; font-weight:700; z-index:2; }
-    canvas#game { width: 800px; height: 600px; image-rendering: pixelated; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); border: 4px solid rgba(255,255,255,0.04); background: #071a0f; z-index:1; }
-    .stage { position: relative; }
-    .overlay { position:absolute; top:0; left:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; width:100%; height:100%; pointer-events:auto; background: rgba(0,0,0,0.45); border-radius:8px; text-align:center; padding:18px; z-index:3; }
-    .hidden{ display:none; }
-    button{ padding: 10px 18px; border:none; border-radius:8px; background:#16a34a; color:white; font-weight:700; cursor:pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.45); margin-top:10px; }
-    button.secondary{ background:#0ea5a6; }
+
+    #container{
+      display:flex; flex-direction:column; /* Organiza elementos verticalmente */
+      align-items:center; 
+      gap:12px; /* Espaçamento entre elementos */
+      position:relative; /* Necessário para overlays */
+    }
+
+    #hud{
+      display:flex; gap:20px; /* Espaçamento entre pontos, vidas e recorde */
+      align-items:center; font-weight:700;
+      z-index:2; /* Fica acima do canvas */
+    }
+
+    canvas#game{
+      width:800px; height:600px; /* Tamanho visual do canvas */
+      image-rendering:pixelated; /* Visual pixelado */
+      border-radius:10px; 
+      box-shadow:0 10px 40px rgba(0,0,0,0.6); 
+      border:4px solid rgba(255,255,255,0.04); 
+      background:#071a0f; 
+      z-index:1; /* Canvas atrás do HUD e overlays */
+    }
+
+    .stage{ position:relative; } /* Contêiner relativo para posicionar overlays */
+    
+    .overlay{
+      position:absolute; top:0; left:0; 
+      display:flex; align-items:center; justify-content:center; 
+      flex-direction:column; gap:12px;
+      width:100%; height:100%; 
+      pointer-events:auto; /* Permite clique */
+      background:rgba(0,0,0,0.45); /* Fundo semi-transparente */
+      border-radius:8px; text-align:center; padding:18px; z-index:3;
+    }
+
+    .overlay.clickable{ cursor:pointer; } /* Cursor de mão quando clicável */
+    .hidden{ display:none; } /* Esconde elemento */
+    
+    button{
+      padding:10px 18px; border:none; border-radius:8px; 
+      background:#16a34a; color:white; font-weight:700; cursor:pointer; 
+      box-shadow:0 6px 18px rgba(0,0,0,0.45);
+    }
+
+    button.secondary{ background:#0ea5a6; } /* Botão secundário */
+
+    #restart-hint{ font-size:12px; opacity:0.85; margin-top:6px; } /* Hint para reiniciar */
   </style>
 </head>
+
 <body>
   <div id="container">
+    <!-- HUD: Pontos, Vidas e Recorde -->
     <div id="hud">
       <div>Pontos: <span id="score">0</span></div>
       <div>Vidas: <span id="lives">3</span></div>
       <div>Recorde: <span id="highscore">0</span></div>
     </div>
+
     <div class="stage">
+      <!-- Canvas do jogo -->
       <canvas id="game" width="800" height="600"></canvas>
+
+      <!-- Tela inicial -->
       <div id="start-screen" class="overlay">
         <h1>Jogo da Cobrinha</h1>
-        <p>Use as setas ou WASD para mover. Pressione <strong>R</strong> para reiniciar.</p>
+        <p>Use as setas ou WASD para mover.</p>
         <button id="startBtn">Start</button>
       </div>
+
+      <!-- Overlay de mensagens (Game Over / Vitória) -->
       <div id="msg" class="overlay hidden"></div>
     </div>
   </div>
 
   <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    const SCALE = 20;
-    const COLS = canvas.width / SCALE;
-    const ROWS = canvas.height / SCALE;
+    // --- SELEÇÃO DE ELEMENTOS ---
+    const canvas = document.getElementById('game'); // Canvas do jogo
+    const ctx = canvas.getContext('2d'); // Contexto 2D para desenhar
+    const scoreEl = document.getElementById('score'); // Pontuação
+    const livesEl = document.getElementById('lives'); // Vidas
+    const highscoreEl = document.getElementById('highscore'); // Recorde
+    const startScreen = document.getElementById('start-screen'); // Tela inicial
+    const startBtn = document.getElementById('startBtn'); // Botão Start
+    const msg = document.getElementById('msg'); // Overlay de mensagens
 
-    let snake = [];
-    let dir = { x: 0, y: 0 };
-    let nextDir = { x: 0, y: 0 };
-    let food = { x: 0, y: 0 };
+    // --- CONFIGURAÇÕES FIXAS ---
+    const SCALE = 20; // Tamanho de cada célula
+    const COLS = canvas.width / SCALE; // Número de colunas
+    const ROWS = canvas.height / SCALE; // Número de linhas
+    const TICK_RATE = 150; // Velocidade do jogo (ms por atualização)
+    const INITIAL_LIVES = 3; // Vidas iniciais
+    const POINTS_PER_FOOD = 10; // Pontos por comida
 
-    const scoreEl = document.getElementById('score');
-    const livesEl = document.getElementById('lives');
-    const highscoreEl = document.getElementById('highscore');
-    const startScreen = document.getElementById('start-screen');
-    const startBtn = document.getElementById('startBtn');
-    const msg = document.getElementById('msg');
+    // --- VARIÁVEIS DE ESTADO ---
+    let snake = []; // Array da cobra
+    let dir = { x: 0, y: 0 }; // Direção atual
+    let nextDir = { x: 0, y: 0 }; // Próxima direção
+    let food = { x: 0, y: 0 }; // Posição da comida
+    let score = 0; // Pontuação atual
+    let lives = INITIAL_LIVES; // Vidas atuais
+    let highscore = 0; // Recorde da sessão
+    let running = false; // Se o jogo está rodando
+    let gameInterval = null; // Referência do setInterval
 
-    let gameInterval = null;
-    const TICK_RATE = 150;
-    const INITIAL_LIVES = 3;
-    const POINTS_PER_FOOD = 10;
-    let score = 0;
-    let lives = INITIAL_LIVES;
-    let highscore = 0;
-    let running = false;
-
-    const bgMusic = new Audio('https://files.freemusicarchive.org/storage-freemusicarchive-org/music/no_curator/Kevin_MacLeod/Happy_Boy/Kevin_MacLeod_-_Happy_Boy.mp3');
+    // --- SONS ---
+    const bgMusic = new Audio('snak.mp3'); // Trilha sonora
     bgMusic.loop = true;
+    bgMusic.volume = 0.2; // Volume da música
     const eatSound = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+    eatSound.volume = 1.0; // Som de comida
     const winSound = new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg');
+    winSound.volume = 1.0; // Som de vitória
     const gameOverSound = new Audio('https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg');
+    gameOverSound.volume = 1.0; // Som de derrota
 
-    function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+    // --- FUNÇÃO AUXILIAR: número inteiro aleatório ---
+    function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 
-    function resetSnake() {
+    // --- INICIA OU REINICIA A COBRA ---
+    function resetSnake(){
       snake = [];
-      const startX = Math.floor(COLS / 2);
-      const startY = Math.floor(ROWS / 2);
-      for (let i = 0; i < 4; i++) snake.push({ x: startX - i, y: startY });
-      dir = { x: 1, y: 0 };
-      nextDir = { x: 1, y: 0 };
+      const startX = Math.floor(COLS/2);
+      const startY = Math.floor(ROWS/2);
+      for(let i=0;i<4;i++) snake.push({x:startX-i, y:startY}); // 4 segmentos
+      dir = {x:1,y:0}; // Direção inicial
+      nextDir = {x:1,y:0};
     }
 
-    function spawnFood() {
-      do { food.x = randInt(0, COLS - 1); food.y = randInt(0, ROWS - 1); } while (snake.some(s => s.x === food.x && s.y === food.y));
+    // --- POSICIONA COMIDA ---
+    function spawnFood(){
+      do{
+        food.x = randInt(0,COLS-1);
+        food.y = randInt(0,ROWS-1);
+      }while(snake.some(s => s.x===food.x && s.y===food.y)); // Não nasce na cobra
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#052310';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // --- DESENHA TUDO ---
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height); // Limpa canvas
+      ctx.fillStyle = '#052310'; // Cor de fundo
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // Desenha comida
       ctx.beginPath();
       ctx.fillStyle = '#ff4157';
-      ctx.arc(food.x * SCALE + SCALE / 2, food.y * SCALE + SCALE / 2, SCALE * 0.4, 0, Math.PI * 2);
+      ctx.arc(food.x*SCALE + SCALE/2, food.y*SCALE + SCALE/2, SCALE*0.4,0,Math.PI*2);
       ctx.fill();
-      snake.forEach((part, i) => {
-        ctx.fillStyle = i === 0 ? '#9fffa3' : '#28a745';
-        ctx.fillRect(part.x * SCALE, part.y * SCALE, SCALE, SCALE);
+
+      // Desenha cobra
+      snake.forEach((part,i)=>{
+        ctx.fillStyle = i===0?'#9fffa3':'#28a745'; // Cabeça mais clara
+        ctx.fillRect(part.x*SCALE,part.y*SCALE,SCALE,SCALE);
       });
     }
 
-    function update() {
-      dir = nextDir;
-      const newHead = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
-      if (newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS || snake.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
+    // --- LÓGICA PRINCIPAL ---
+    function update(){
+      dir = nextDir; // Atualiza direção
+      const newHead = {x:snake[0].x+dir.x, y:snake[0].y+dir.y};
+
+      // Checa colisões com paredes ou corpo
+      if(newHead.x<0 || newHead.x>=COLS || newHead.y<0 || newHead.y>=ROWS || snake.some(seg=>seg.x===newHead.x && seg.y===newHead.y)){
         handleDeath();
         return;
       }
-      snake.unshift(newHead);
-      if (newHead.x === food.x && newHead.y === food.y) {
+
+      snake.unshift(newHead); // Adiciona nova cabeça
+
+      // Cobra comeu comida
+      if(newHead.x===food.x && newHead.y===food.y){
         score += POINTS_PER_FOOD;
         scoreEl.textContent = score;
-        eatSound.currentTime = 0; eatSound.play();
+        try{ eatSound.currentTime=0; eatSound.play(); }catch(e){}
         spawnFood();
-      } else {
-        snake.pop();
+      }else{
+        snake.pop(); // Remove cauda se não comeu
       }
+
       draw();
-      if (snake.length >= COLS * ROWS) { clearInterval(gameInterval); running = false; bgMusic.pause(); winSound.play(); showMessage(`Você venceu! Pontos: ${score}`, true); }
-    }
 
-    function handleDeath() {
-      clearInterval(gameInterval);
-      running = false;
-      lives -= 1;
-      livesEl.textContent = lives;
-      if (lives > 0) {
-        showTempMessage(`Você perdeu uma vida! Vidas restantes: ${lives}`, 900, () => { resetSnake(); spawnFood(); draw(); startLoop(); });
-      } else {
-        bgMusic.pause(); gameOverSound.play();
-        if (score > highscore) { highscore = score; highscoreEl.textContent = highscore; }
-        showMessage(`Game Over! Você fez ${score} pontos.`, false);
+      // Vitória: cobra preenche tudo
+      if(snake.length>=COLS*ROWS){
+        clearInterval(gameInterval);
+        running=false;
+        try{ bgMusic.pause(); }catch(e){}
+        try{ winSound.play(); }catch(e){}
+        showMessage(`Você venceu! Pontos: ${score}`,true);
       }
     }
 
-    function showTempMessage(text, duration = 900, cb) {
-      msg.textContent = text; msg.classList.remove('hidden');
-      setTimeout(() => { msg.classList.add('hidden'); if (cb) cb(); }, duration);
+    // --- TRATA MORTE ---
+    function handleDeath(){
+      clearInterval(gameInterval);
+      running=false;
+      lives -=1;
+      livesEl.textContent = lives;
+
+      if(lives>0){
+        // Se ainda há vidas, reinicia cobra temporariamente
+        showTempMessage(`Você perdeu uma vida! Vidas restantes: ${lives}`,900,()=>{
+          resetSnake(); spawnFood(); draw(); startLoop();
+        });
+      }else{
+        // Game Over
+        try{ bgMusic.pause(); }catch(e){}
+        try{ gameOverSound.play(); }catch(e){}
+        if(score>highscore){ highscore=score; highscoreEl.textContent=highscore; }
+        showMessage(`Game Over! Você fez ${score} pontos.`,false);
+      }
     }
 
-    function showMessage(text, isWin = false) {
-      msg.innerHTML = `<div><strong>${isWin ? 'Vitória' : 'Game Over'}</strong><br>${text}<br>Recorde atual: ${highscore}</div><button id="restartBtn" class="secondary">Reiniciar</button>`;
+    // --- MENSAGEM TEMPORÁRIA ---
+    function showTempMessage(text,duration=900,cb){
+      msg.textContent=text;
       msg.classList.remove('hidden');
-      document.getElementById('restartBtn').addEventListener('click', () => {
-        score = 0; lives = INITIAL_LIVES; scoreEl.textContent = score; livesEl.textContent = lives;
-        msg.classList.add('hidden'); startScreen.classList.remove('hidden');
-      });
+      setTimeout(()=>{ msg.classList.add('hidden'); if(cb) cb(); }, duration);
     }
 
-    function startLoop() { if (running) return; clearInterval(gameInterval); gameInterval = setInterval(update, TICK_RATE); running = true; }
-
-    function startGame() {
-      startScreen.classList.add('hidden');
-      score = 0; lives = INITIAL_LIVES; scoreEl.textContent = score; livesEl.textContent = lives;
-      resetSnake(); spawnFood(); draw(); bgMusic.currentTime = 0; bgMusic.play(); startLoop();
+    // --- MENSAGEM PERSISTENTE (Game Over/Vitória) ---
+    function showMessage(text,isWin=false){
+      msg.innerHTML=`<div><strong>${isWin?'Vitória':'Game Over'}</strong><br>${text}<br><small id="restart-hint">Clica na tela para recomeçar</small></div>`;
+      msg.classList.add('clickable'); msg.classList.remove('hidden');
+      // Clique no overlay reinicia o jogo
+      msg.addEventListener('click',()=>{ restartMatch(); },{once:true});
     }
 
-    startBtn.addEventListener('click', startGame);
-    window.addEventListener('keydown', e => {
+    // --- LOOP PRINCIPAL ---
+    function startLoop(){
+      if(running) return; // Evita múltiplos intervals
+      clearInterval(gameInterval);
+      gameInterval=setInterval(update,TICK_RATE);
+      running=true;
+    }
+
+    // --- INICIA JOGO ---
+    function startGame(){
+      startScreen.classList.add('hidden'); // Esconde tela inicial
+      score=0; lives=INITIAL_LIVES;
+      scoreEl.textContent=score; livesEl.textContent=lives;
+      resetSnake(); spawnFood(); draw();
+      try{ bgMusic.currentTime=0; bgMusic.play(); }catch(e){} // Música começa
+      startLoop();
+    }
+
+    // --- REINICIA PARTIDA ---
+    function restartMatch(){
+      clearInterval(gameInterval); running=false;
+      score=0; scoreEl.textContent=score;
+      lives=INITIAL_LIVES; livesEl.textContent=lives;
+      resetSnake(); spawnFood(); draw();
+      try{ bgMusic.currentTime=0; bgMusic.play(); }catch(e){} // Música reinicia
+      startLoop();
+      msg.classList.add('hidden'); msg.classList.remove('clickable');
+    }
+
+    // --- EVENTOS ---
+    startBtn.addEventListener('click',startGame); // Start botão
+    window.addEventListener('keydown',e=>{
       switch(e.key){
         case 'ArrowUp': case 'w': case 'W': if(dir.y!==1) nextDir={x:0,y:-1}; break;
         case 'ArrowDown': case 's': case 'S': if(dir.y!==-1) nextDir={x:0,y:1}; break;
         case 'ArrowLeft': case 'a': case 'A': if(dir.x!==1) nextDir={x:-1,y:0}; break;
         case 'ArrowRight': case 'd': case 'D': if(dir.x!==-1) nextDir={x:1,y:0}; break;
-        case 'r': case 'R': startGame(); break;
       }
     });
 
+    // --- INICIALIZA JOGO ---
     resetSnake(); spawnFood(); draw();
   </script>
 </body>
 </html>
+,
