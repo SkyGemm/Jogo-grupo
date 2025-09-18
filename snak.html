@@ -1,550 +1,1169 @@
-<!doctype html> <!-- Declaração do tipo de documento HTML5 -->
-<html lang="pt-BR"> <!-- Elemento raiz do documento, definindo idioma português do Brasil -->
-<head> <!-- Cabeçalho do documento - metadados, estilos, scripts -->
-<meta charset="utf-8"/> <!-- Define a codificação de caracteres como UTF-8 -->
-<meta name="viewport" content="width=device-width,initial-scale=1"/> <!-- Configura viewport para responsividade -->
-<title>Cobrinha — Versão Aprimorada</title> <!-- Título da página exibido na aba do navegador -->
-
-<!-- Início do bloco de estilos CSS -->
-<style>
-  :root{ /* Define variáveis CSS para cores e temas */
-    --bg1:#071422; --bg2:#051718; --ui:#e6f4ea; --accent:#16a34a;
-  }
-  *{box-sizing:border-box} /* Faz com que padding e border sejam incluídos na largura/altura */
-  html,body{height:100%; margin:0; font-family:Inter,Arial,Helvetica,sans-serif; background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%); color:var(--ui);} /* Estilos base da página */
-  #container{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;} /* Container principal centralizado */
-  .stage{position:relative; display:flex; flex-direction:column; align-items:center; gap:12px;} /* Área do jogo */
-  canvas#game{border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,0.6); border:4px solid rgba(255,255,255,0.04); background:#071a0f; image-rendering:pixelated; display:block;} /* Estilo do canvas do jogo */
-  #hud{display:flex; gap:14px; align-items:center; font-weight:700; z-index:4; user-select:none;} /* Área de informações (Heads Up Display) */
-  .hud-item{background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:8px;} /* Itens do HUD */
-  .controls{display:flex; gap:8px; align-items:center;} /* Container de controles */
-  button, .btn{padding:8px 12px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-weight:700; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.45);} /* Estilo base de botões */
-  button.secondary{background:#0ea5a6;} /* Estilo para botões secundários */
-  .overlay{position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; background:rgba(0,0,0,0.45); border-radius:8px; text-align:center; padding:18px; z-index:6; pointer-events:auto;} /* Overlays (telas de início, mensagens) */
-  .hidden{display:none} /* Classe utilitária para esconder elementos */
-  #start-screen h1{margin:0; font-size:28px} /* Título da tela inicial */
-  .small{font-size:12px; opacity:0.9} /* Texto pequeno */
-  #msg{cursor:pointer} /* Mensagem clicável */
-  .settings-panel{position:relative; display:flex; gap:8px; align-items:center;} /* Painel de configurações */
-  input[type=range]{width:120px} /* Largura dos controles deslizantes */
-  #leaderboard{max-height:220px; overflow:auto; width:220px; text-align:left; background:rgba(255,255,255,0.03); padding:8px; border-radius:8px} /* Estilo do placar de líderes */
-  .muted{opacity:0.5} /* Classe para estado mudo */
-  footer.small{margin-top:6px; opacity:0.8} /* Rodapé */
-  @media (max-width:900px){ /* Regras responsivas para dispositivos menores */
-    canvas#game{width:360px; height:270px}
-    #hud{flex-direction:column; gap:8px}
-  }
-</style>
-</head>
-<body> <!-- Corpo do documento - conteúdo visível -->
-<div id="container"> <!-- Container principal -->
-  <div class="stage"> <!-- Área do jogo -->
-    <div id="hud"> <!-- Painel de informações (Heads Up Display) -->
-      <div class="hud-item">Pontos: <span id="score">0</span></div> <!-- Exibição de pontuação -->
-      <div class="hud-item">Vidas: <span id="lives">3</span></div> <!-- Exibição de vidas -->
-      <div class="hud-item">Recorde: <span id="highscore">0</span></div> <!-- Exibição de recorde -->
-      <div class="controls"> <!-- Controles do jogo -->
-        <button id="pauseBtn" class="secondary">Pausar(Clique P ou Esc)</button> <!-- Botão de pausa -->
-        <button id="muteBtn">Música: On</button> <!-- Botão de mudo -->
-        <div class="settings-panel"> <!-- Controle de velocidade -->
-          <label class="small">Velocidade</label>
-          <input id="speedRange" type="range" min="6" max="18" value="10"/>
-        </div>
-        <div class="settings-panel"> <!-- Controle de volume -->
-          <label class="small">Volume</label>
-          <input id="volRange" type="range" min="0" max="1" step="0.05" value="0.6"/>
-        </div>
-      </div>
-    </div>
-
-    <canvas id="game"></canvas> <!-- Elemento canvas onde o jogo é renderizado -->
-
-    <div id="start-screen" class="overlay"> <!-- Tela inicial -->
-      <h1>Jogo da Cobrinha</h1> <!-- Título do jogo -->
-      <p>Use setas / WASD / swipe (mobile). P / Esc para pausar. M para mute. Clique em Start.</p> <!-- Instruções -->
-      <div style="display:flex;gap:8px"> <!-- Container de botões -->
-        <button id="startBtn">Start</button> <!-- Botão para iniciar jogo -->
-        <button id="howBtn" class="secondary">Como Jogar</button> <!-- Botão de ajuda -->
-      </div>
-      <div style="display:flex; gap:12px; margin-top:8px; align-items:center;"> <!-- Container do placar -->
-        <div id="leaderboard" aria-live="polite"> <!-- Placar de líderes -->
-          <strong>Top local</strong><div id="lb-list" class="small"></div> <!-- Lista de recordes -->
-        </div>
-      </div>
-      <footer class="small">Preferências salvas localmente.</footer> <!-- Informação sobre salvamento -->
-    </div>
-
-    <div id="msg" class="overlay hidden"></div> <!-- Overlay para mensagens (inicialmente oculto) -->
-  </div>
-</div>
-
-<script> <!-- Início do script JavaScript -->
-/* =======================
-   Configurações & Estado
-   ======================= */
-const CSS_WIDTH = 800, CSS_HEIGHT = 600; // Dimensões CSS do canvas
-const canvas = document.getElementById('game'); // Referência ao elemento canvas
-const ctx = canvas.getContext('2d', {alpha:false}); // Contexto 2D do canvas (sem transparência)
-const scoreEl = document.getElementById('score'); // Elemento de pontuação
-const livesEl = document.getElementById('lives'); // Elemento de vidas
-const highscoreEl = document.getElementById('highscore'); // Elemento de recorde
-const startScreen = document.getElementById('start-screen'); // Tela inicial
-const startBtn = document.getElementById('startBtn'); // Botão de iniciar
-const howBtn = document.getElementById('howBtn'); // Botão de como jogar
-const msg = document.getElementById('msg'); // Elemento de mensagem
-const pauseBtn = document.getElementById('pauseBtn'); // Botão de pausa
-const muteBtn = document.getElementById('muteBtn'); // Botão de mudo
-const speedRange = document.getElementById('speedRange'); // Controle de velocidade
-const volRange = document.getElementById('volRange'); // Controle de volume
-const lbList = document.getElementById('lb-list'); // Lista do placar
-
-const STORAGE = { // Chaves para armazenamento local
-  HS: 'snake_highscore_v2', // Recorde
-  PREF: 'snake_prefs_v1', // Preferências
-  LB: 'snake_leaderboard_v1', // Placar de líderes
-};
-
-let prefs = { muted:false, volume:0.6, baseFPS:10 }; // Preferências padrão
-let SCALE = 20; // Tamanho de cada célula/cobra
-let COLS, ROWS; // Colunas e linhas do grid (calculadas depois)
-let snake = []; // Array que representa a cobra
-let dir = {x:0,y:0}, nextDir = {x:0,y:0}; // Direção atual e próxima direção
-let food = {x:0,y:0}; // Posição da comida
-let score = 0, lives = 3, highscore = 0; // Pontuação, vidas e recorde
-let running = false; // Estado de execução do jogo
-let invincibleUntil = 0; // Timestamp para invencibilidade temporária
-let lastTimestamp = 0; // Último timestamp para cálculo de delta time
-
-/* fixed timestep */ // Sistema de tempo fixo para física consistente
-let accumulator = 0; // Acumulador para steps de física
-let timestep = 1000/10; // Tempo por step (será atualizado com prefs.baseFPS)
-
-/* Offscreen cache for chessboard */ // Cache para o tabuleiro xadrez
-let bgCanvas, bgCtx; // Canvas e contexto para fundo em cache
-
-/* Audio assets */ // Elementos de áudio
-let bgMusic, eatSound, gameOverSound, winSound;
-
-/* Leaderboard */ // Placar de líderes
-let leaderboard = [];
-
-/* =======================
-   Utilidades
-   ======================= */
-function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; } // Número aleatório entre min e max
-function now(){ return performance.now(); } // Timestamp atual de alta precisão
-function savePrefs(){ localStorage.setItem(STORAGE.PREF, JSON.stringify(prefs)); } // Salva preferências
-function loadPrefs(){ try{ const p = JSON.parse(localStorage.getItem(STORAGE.PREF)); if(p) prefs = {...prefs, ...p}; }catch(e){} } // Carrega preferências
-function loadHS(){ highscore = +localStorage.getItem(STORAGE.HS) || 0; highscoreEl.textContent = highscore; } // Carrega recorde
-function saveHS(){ localStorage.setItem(STORAGE.HS, highscore); highscoreEl.textContent = highscore; } // Salva recorde
-function loadLeaderboard(){ try{ leaderboard = JSON.parse(localStorage.getItem(STORAGE.LB))||[]; }catch(e){ leaderboard=[]; } renderLeaderboard(); } // Carrega placar
-function saveLeaderboard(){ localStorage.setItem(STORAGE.LB, JSON.stringify(leaderboard)); renderLeaderboard(); } // Salva placar
-function addToLeaderboard(scoreVal){ leaderboard.push({score:scoreVal, date:(new Date()).toISOString()}); leaderboard.sort((a,b)=>b.score-a.score); leaderboard = leaderboard.slice(0,10); saveLeaderboard(); } // Adiciona ao placar
-
-/* =======================
-   Retina / canvas sizing
-   ======================= */
-function setupCanvas(){ // Configura canvas para alta resolução (Retina)
-  const dpr = window.devicePixelRatio || 1; // Ratio de pixels do dispositivo
-  canvas.style.width = CSS_WIDTH + 'px'; // Largura CSS
-  canvas.style.height = CSS_HEIGHT + 'px'; // Altura CSS
-  canvas.width = Math.floor(CSS_WIDTH * dpr); // Largura real (considerando DPR)
-  canvas.height = Math.floor(CSS_HEIGHT * dpr); // Altura real (considerando DPR)
-  ctx.setTransform(dpr,0,0,dpr,0,0); // Ajusta transformação para compensar DPR
-  // compute grid
-  SCALE = 20; // tamanho da célula em pixels CSS
-  COLS = Math.floor(CSS_WIDTH / SCALE); // Calcula colunas
-  ROWS = Math.floor(CSS_HEIGHT / SCALE); // Calcula linhas
-  // offscreen board
-  bgCanvas = document.createElement('canvas'); // Cria canvas para fundo em cache
-  bgCanvas.width = CSS_WIDTH; // Largura do canvas de fundo
-  bgCanvas.height = CSS_HEIGHT; // Altura do canvas de fundo
-  bgCtx = bgCanvas.getContext('2d'); // Contexto do canvas de fundo
-  drawChessboardToCache(); // Desenha tabuleiro xadrez no cache
-}
-
-/* draw chessboard once to offscreen */ // Desenha tabuleiro xadrez no cache
-function drawChessboardToCache(){
-  const s = SCALE; // Tamanho da escala
-  for(let y=0;y<ROWS;y++){ // Para cada linha
-    for(let x=0;x<COLS;x++){ // Para cada coluna
-      bgCtx.fillStyle=(x+y)%2===0?'#f9f2e7':'#eee1c6'; // Alterna cores (xadrez)
-      bgCtx.fillRect(x*s, y*s, s, s); // Desenha célula
-    }
-  }
-}
-
-/* =======================
-   Audio
-   ======================= */
-function setupAudio(){ // Configura elementos de áudio
-  // create audio elements (can be local or remote). Prefer user-supplied files in same folder.
-  bgMusic = new Audio('snak.mp3'); bgMusic.loop = true; bgMusic.volume = prefs.volume; // Música de fundo
-  eatSound = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg'); eatSound.volume = 1.0; // Som ao comer
-  gameOverSound = new Audio('https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg'); gameOverSound.volume = 1.0; // Som de game over
-  winSound = new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg'); winSound.volume = 1.0; // Som de vitória
-  applyAudioPrefs(); // Aplica preferências de áudio
-  // try to preload
-  [bgMusic,eatSound,gameOverSound,winSound].forEach(a=>{ // Tenta pré-carregar áudios
-    a.preload = 'auto'; // Define pré-carregamento automático
-    a.addEventListener('error', ()=>{/* ignore */}); // Ignora erros de carregamento
-  });
-}
-function applyAudioPrefs(){ // Aplica preferências de áudio
-  try{
-    const vol = +prefs.volume; // Volume das preferências
-    [eatSound,gameOverSound,winSound].forEach(s=>s.volume = Math.min(1, Math.max(0, vol))); // Ajusta volume dos efeitos
-    if(bgMusic) bgMusic.volume = vol * 0.6; // Ajusta volume da música (mais baixo)
-    updateMuteButton(); // Atualiza texto do botão de mudo
-  }catch(e){}
-}
-function playSound(snd){ // Toca som (se não estiver mudo)
-  if(prefs.muted) return; // Não toca se mudo
-  try{ snd.currentTime = 0; snd.play().catch(()=>{}); }catch(e){} // Reinicia e toca som
-}
-
-/* =======================
-   Game logic
-   ======================= */
-const INITIAL_LIVES = 3; // Vidas iniciais
-const POINTS_PER_FOOD = 10; // Pontos por comida
-
-function resetSnake(){ // Reinicia a cobra
-  snake = []; // Limpa array da cobra
-  const startX = Math.floor(COLS/2); // Posição X inicial (centro)
-  const startY = Math.floor(ROWS/2); // Posição Y inicial (centro)
-  for(let i=0;i<4;i++) snake.push({x:startX-i, y:startY}); // Cria cobra com 4 segmentos
-  dir = {x:1,y:0}; nextDir = {x:1,y:0}; // Direção inicial (direita)
-}
-
-function spawnFood(){ // Gera comida em posição aleatória
-  // ensure not on snake
-  let tries=0; // Contador de tentativas
-  do{
-    food.x = randInt(0,COLS-1); // Posição X aleatória
-    food.y = randInt(0,ROWS-1); // Posição Y aleatória
-    tries++; // Incrementa tentativas
-    if(tries>2000) break; // Prevenção contra loop infinito
-  }while(snake.some(s=>s.x===food.x && s.y===food.y)); // Repete se comida estiver sobre a cobra
-}
-
-/* update once (grid tick) */ // Atualização do jogo (chamada a cada tick)
-function update(){
-  // apply nextDir but prevent reversing
-  if(!(nextDir.x === -dir.x && nextDir.y === -dir.y)) dir = nextDir; // Aplica nova direção (se não for oposta)
-  const newHead = {x:snake[0].x + dir.x, y:snake[0].y + dir.y}; // Calcula nova posição da cabeça
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <!-- Define a codificação de caracteres como UTF-8 para suportar acentos e caracteres especiais -->
+  <meta charset="utf-8"/>
   
-  // walls = lethal by default
-  const outOfBounds = newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS; // Verifica se saiu dos limites
-  // self collision check (allow if invincible)
-  const collidedWithSelf = snake.some(s=>s.x===newHead.x && s.y===newHead.y); // Verifica colisão consigo mesma
-  if((outOfBounds || collidedWithSelf) && now() > invincibleUntil){ // Se colidiu e não está invencível
-    // lose life
-    loseLife(); // Perde uma vida
-    return;
-  }
-  snake.unshift(newHead); // Adiciona nova cabeça
-  if(newHead.x === food.x && newHead.y === food.y){ // Se comeu a comida
-    score += POINTS_PER_FOOD; // Adiciona pontos
-    scoreEl.textContent = score; // Atualiza exibição de pontos
-    playSound(eatSound); // Toca som de comer
-    try{ navigator.vibrate && navigator.vibrate(40); }catch(e){} // Vibração (se disponível)
-    spawnFood(); // Gera nova comida
-  } else {
-    snake.pop(); // Remove cauda (se não comeu)
-  }
-  // optional win condition: fill board
-  if(snake.length >= COLS*ROWS - 1){ // Se preencheu quase todo o tabuleiro
-    handleWin(); // Vitória
-  }
-}
+  <!-- Configura a viewport para dispositivos móveis: largura igual ao dispositivo e escala inicial 1 -->
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  
+  <!-- Título da página exibido na aba do navegador -->
+  <title>Cobrinha — Versão Aprimorada</title>
 
-/* life handling */ // Manipulação de vidas
-function loseLife(){ // Perde uma vida
-  running = false; // Pausa jogo
-  lives--; // Decrementa vidas
-  livesEl.textContent = lives; // Atualiza exibição
-  playSound(gameOverSound); // Toca som de game over
-  if(lives > 0){ // Se ainda tem vidas
-    showTempMessage(`Você perdeu uma vida! Vidas: ${lives}`, 1000, ()=>{ // Mostra mensagem temporária
-      // respawn with short invincibility
-      resetSnake(); spawnFood(); // Reinicia cobra e comida
-      invincibleUntil = now() + 1500; // 1.5s de invencibilidade
-      running = true; // Retoma jogo
-    });
-  } else { // Game over
-    // game over
-    if(score > highscore){ highscore = score; saveHS(); } // Atualiza recorde se necessário
-    addToLeaderboard(score); // Adiciona ao placar
-    showMessage(`Game Over! Pontos: ${score}`, false); // Mostra mensagem de game over
-  }
-}
-function handleWin(){ // Manipula vitória
-  running = false; // Pausa jogo
-  playSound(winSound); // Toca som de vitória
-  if(score > highscore){ highscore = score; saveHS(); } // Atualiza recorde
-  addToLeaderboard(score); // Adiciona ao placar
-  showMessage(`Você venceu! Pontos: ${score}`, true); // Mostra mensagem de vitória
-}
+  <!-- Estilos CSS embutidos para layout, cores, responsividade e elementos visuais do jogo -->
+  <style>
+    /* Define variáveis CSS para cores e estilos reutilizáveis */
+    :root{
+      --bg1:#071422; /* Cor de fundo superior do gradiente */
+      --bg2:#051718; /* Cor de fundo inferior do gradiente */
+      --ui:#e6f4ea;  /* Cor de texto e elementos de interface */
+      --accent:#16a34a; /* Cor de destaque (botões, ações) */
+    }
 
-/* =======================
-   Rendering
-   ======================= */
-let blinkState = true; // Estado de piscar (olhos)
-let mouthOpen = true; // Estado da boca (aberta/fechada)
-let animTimer = 0; // Temporizador de animação
+    /* Aplica box-sizing border-box a todos os elementos para facilitar cálculos de layout */
+    *{box-sizing:border-box}
 
-/* draw main frame */ // Renderiza frame principal
-function render(interp){
-  // draw cached background (stretched to CSS size)
-  ctx.drawImage(bgCanvas, 0, 0, CSS_WIDTH, CSS_HEIGHT); // Desenha fundo em cache
+    /* Estilo da página inteira: altura 100%, sem margem, fonte moderna, gradiente de fundo e cor de texto */
+    html,body{
+      height:100%; 
+      margin:0; 
+      font-family:Inter,Arial,Helvetica,sans-serif; 
+      background:linear-gradient(180deg,var(--bg1) 0%,var(--bg2) 100%); 
+      color:var(--ui);
+    }
 
-  // draw food (apple) // Desenha comida (maçã)
-  const fx = food.x * SCALE + SCALE/2; // Posição X centralizada
-  const fy = food.y * SCALE + SCALE/2; // Posição Y centralizada
-  ctx.fillStyle = '#ff4c4c'; // Cor da maçã
-  ctx.beginPath(); ctx.arc(fx, fy, SCALE*0.4, 0, Math.PI*2); ctx.fill(); // Desenha círculo
-  ctx.strokeStyle = '#2b5d34'; ctx.lineWidth = 2; // Estilo do cabinho
-  ctx.beginPath(); ctx.moveTo(fx, fy - SCALE*0.4); ctx.lineTo(fx, fy - SCALE*0.6); ctx.stroke(); // Desenha cabinho
-  ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); // Estilo do brilho
-  ctx.arc(fx - SCALE*0.15, fy - SCALE*0.15, SCALE*0.1, 0, Math.PI*2); ctx.fill(); // Desenha brilho
+    /* Container centralizado vertical e horizontalmente com padding */
+    #container{
+      min-height:100vh; 
+      display:flex; 
+      align-items:center; 
+      justify-content:center; 
+      padding:24px;
+    }
 
-  // draw snake segments (with basic interpolation for smoothness) // Desenha segmentos da cobra
-  for(let i=0;i<snake.length;i++){ // Para cada segmento
-    const part = snake[i]; // Segmento atual
-    const px = part.x * SCALE; // Posição X em pixels
-    const py = part.y * SCALE; // Posição Y em pixels
-    if(i === 0){ // Se é a cabeça
-      // head
-      ctx.fillStyle = '#9fffa3'; // Cor da cabeça
-      ctx.fillRect(px, py, SCALE, SCALE); // Desenha cabeça
-      ctx.fillStyle = '#000'; // Cor preta para olhos
-      if(blinkState){ // Se deve piscar
-        ctx.fillRect(px + 4, py + 4, 3, 3); // Olho esquerdo
-        ctx.fillRect(px + SCALE - 7, py + 4, 3, 3); // Olho direito
+    /* Agrupa elementos do jogo (HUD, canvas, controles) em coluna centralizada */
+    .stage{
+      position:relative; 
+      display:flex; 
+      flex-direction:column; 
+      align-items:center; 
+      gap:12px;
+    }
+
+    /* Estilo do canvas do jogo: bordas arredondadas, sombra, fundo escuro, pixelado */
+    canvas#game{
+      border-radius:10px; 
+      box-shadow:0 10px 40px rgba(0,0,0,0.6); 
+      border:4px solid rgba(255,255,255,0.04); 
+      background:#071a0f; 
+      image-rendering:pixelated; 
+      display:block;
+    }
+
+    /* Barra de HUD (Heads-Up Display) com pontuação, vidas e recorde */
+    #hud{
+      display:flex; 
+      gap:14px; 
+      align-items:center; 
+      font-weight:700; 
+      z-index:4; 
+      user-select:none; /* Impede seleção de texto */
+    }
+
+    /* Estilo de cada item do HUD (ex: "Pontos: 0") */
+    .hud-item{
+      background:rgba(255,255,255,0.03); 
+      padding:8px 12px; 
+      border-radius:8px;
+    }
+
+    /* Contêiner dos botões de controle */
+    .controls{
+      display:flex; 
+      gap:8px; 
+      align-items:center;
+    }
+
+    /* Estilo dos botões (primário e secundário) */
+    button, .btn{
+      padding:8px 12px; 
+      border-radius:8px; 
+      border:none; 
+      background:var(--accent); 
+      color:#fff; 
+      font-weight:700; 
+      cursor:pointer; 
+      box-shadow:0 6px 18px rgba(0,0,0,0.45);
+    }
+    button.secondary{
+      background:#0ea5a6; /* Cor alternativa */
+    }
+
+    /* Overlay (tela de sobreposição) para mensagens, início e pausa */
+    .overlay{
+      position:absolute; 
+      top:0; 
+      left:0; 
+      width:100%; 
+      height:100%; 
+      display:flex; 
+      align-items:center; 
+      justify-content:center; 
+      flex-direction:column; 
+      gap:12px; 
+      background:rgba(0,0,0,0.45); 
+      border-radius:8px; 
+      text-align:center; 
+      padding:18px; 
+      z-index:6; 
+      pointer-events:auto; /* Permite interação */
+    }
+
+    /* Classe para esconder elementos (display: none) */
+    .hidden{display:none}
+
+    /* Estilo do título na tela inicial */
+    #start-screen h1{
+      margin:0; 
+      font-size:28px
+    }
+
+    /* Classe para textos menores e com opacidade reduzida */
+    .small{
+      font-size:12px; 
+      opacity:0.9
+    }
+
+    /* Estilo do elemento de mensagem clicável */
+    #msg{cursor:pointer}
+
+    /* Painel de configurações (velocidade, volume) */
+    .settings-panel{
+      position:relative; 
+      display:flex; 
+      gap:8px; 
+      align-items:center;
+    }
+
+    /* Slider de configuração (range input) */
+    input[type=range]{width:120px}
+
+    /* Painel do leaderboard (placar de recordes) */
+    #leaderboard{
+      max-height:220px; 
+      overflow:auto; 
+      width:220px; 
+      text-align:left; 
+      background:rgba(255,255,255,0.03); 
+      padding:8px; 
+      border-radius:8px
+    }
+
+    /* Classe para elementos "mutados" (ex: ícones de áudio desligado) */
+    .muted{opacity:0.5}
+
+    /* Rodapé com texto pequeno */
+    footer.small{
+      margin-top:6px; 
+      opacity:0.8
+    }
+    
+    /* ================================
+       ESTILOS PARA CONTROLES TOUCH (MOBILE)
+       ================================ */
+    .touch-controls {
+      display: none; /* Escondido por padrão, aparece apenas em telas menores */
+      position: relative;
+      width: 100%;
+      margin-top: 20px;
+      touch-action: none; /* Previne comportamentos padrão de toque (zoom, scroll) */
+      user-select: none; /* Impede seleção de texto */
+    }
+    
+    /* D-Pad (direcional virtual) */
+    .d-pad {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      width: 120px;
+      height: 120px;
+    }
+    
+    /* Botões individuais do D-Pad */
+    .d-pad-button {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 20px;
+    }
+    
+    /* Posicionamento dos botões do D-Pad */
+    .d-pad-up { top: 0; left: 40px; }
+    .d-pad-down { bottom: 0; left: 40px; }
+    .d-pad-left { top: 40px; left: 0; }
+    .d-pad-right { top: 40px; right: 0; }
+    
+    /* Botões de ação (Pausar, Reiniciar) */
+    .action-buttons {
+      position: absolute;
+      right: 20px;
+      bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .action-button {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%; /* Forma circular */
+      background: rgba(22, 163, 74, 0.7); /* Verde translúcido */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    
+    /* ================================
+       MEDIA QUERIES - RESPONSIVIDADE
+       ================================ */
+    @media (max-width: 900px) {
+      #container {
+        padding: 10px;
+        align-items: flex-start; /* Alinha ao topo em telas menores */
+        padding-top: 20px;
       }
-      ctx.fillRect(px + 6, py + SCALE - (mouthOpen?7:6), 4, 1); // Boca (aberta ou fechada)
-      ctx.fillStyle = 'rgba(0,0,0,0.12)'; // Sombra
-      ctx.fillRect(px, py + SCALE - 2, SCALE, 2); // Desenha sombra
-    } else { // Corpo
-      ctx.fillStyle = '#28a745'; // Cor do corpo
-      ctx.fillRect(px, py, SCALE, SCALE); // Desenha segmento
-      ctx.strokeStyle = '#1c7c32'; // Cor do padrão
-      ctx.beginPath(); // Inicia caminho
-      if((i + animTimer) % 2 === 0){ // Padrão alternado
-        ctx.moveTo(px, py); ctx.lineTo(px + SCALE, py + SCALE); // Diagonal \
+      
+      .stage {
+        width: 100%;
+        max-width: 500px; /* Limita largura máxima */
+      }
+      
+      canvas#game {
+        width: 100% !important;
+        height: auto !important;
+        max-height: 50vh; /* Limita altura em telas menores */
+      }
+      
+      #hud {
+        flex-direction: column; /* Empilha os itens do HUD verticalmente */
+        gap: 8px;
+        width: 100%;
+      }
+      
+      .controls {
+        flex-wrap: wrap; /* Permite que botões quebrem linha */
+        justify-content: center;
+      }
+      
+      .settings-panel {
+        flex: 1;
+        min-width: 45%;
+        justify-content: center;
+      }
+      
+      input[type=range] {
+        width: 100%; /* Slider ocupa toda a largura disponível */
+      }
+      
+      #leaderboard {
+        width: 100%;
+        max-height: 120px; /* Reduz altura do placar */
+      }
+      
+      .touch-controls {
+        display: block; /* Mostra controles touch em telas menores */
+      }
+      
+      #start-screen h1 {
+        font-size: 24px; /* Título menor */
+      }
+    }
+    
+    @media (max-width: 600px) {
+      .controls {
+        flex-direction: column; /* Empilha botões verticalmente */
+      }
+      
+      .settings-panel {
+        min-width: 100%; /* Ocupa toda a largura */
+      }
+      
+      /* Reduz tamanho do D-Pad */
+      .d-pad {
+        width: 100px;
+        height: 100px;
+        left: 10px;
+        bottom: 10px;
+      }
+      
+      .d-pad-button {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+      }
+      
+      /* Ajusta posicionamento dos botões do D-Pad */
+      .d-pad-up { left: 35px; }
+      .d-pad-down { left: 35px; }
+      .d-pad-left { top: 35px; }
+      .d-pad-right { top: 35px; }
+      
+      .action-buttons {
+        right: 10px;
+        bottom: 10px;
+      }
+      
+      .action-button {
+        width: 50px;
+        height: 50px;
+      }
+    }
+    
+    @media (max-width: 400px) {
+      #start-screen h1 {
+        font-size: 20px;
+      }
+      
+      .hud-item {
+        padding: 6px 10px;
+        font-size: 14px;
+      }
+      
+      button, .btn {
+        padding: 6px 10px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Container principal do jogo -->
+  <div id="container">
+    <div class="stage">
+      <!-- HUD: exibe pontuação, vidas e recorde -->
+      <div id="hud">
+        <div class="hud-item">Pontos: <span id="score">0</span></div>
+        <div class="hud-item">Vidas: <span id="lives">3</span></div>
+        <div class="hud-item">Recorde: <span id="highscore">0</span></div>
+        
+        <!-- Controles: botões e sliders -->
+        <div class="controls">
+          <button id="pauseBtn" class="secondary">Pausar(Clique P ou Esc)</button>
+          <button id="muteBtn">Música: On</button>
+          
+          <!-- Controle de velocidade -->
+          <div class="settings-panel">
+            <label class="small">Velocidade</label>
+            <input id="speedRange" type="range" min="6" max="18" value="10"/>
+          </div>
+          
+          <!-- Controle de volume -->
+          <div class="settings-panel">
+            <label class="small">Volume</label>
+            <input id="volRange" type="range" min="0" max="1" step="0.05" value="0.6"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas onde o jogo é renderizado -->
+      <canvas id="game"></canvas>
+      
+      <!-- Controles touch para dispositivos móveis (escondidos em desktop) -->
+      <div class="touch-controls">
+        <div class="d-pad">
+          <div class="d-pad-button d-pad-up">↑</div>
+          <div class="d-pad-button d-pad-down">↓</div>
+          <div class="d-pad-button d-pad-left">←</div>
+          <div class="d-pad-button d-pad-right">→</div>
+        </div>
+        <div class="action-buttons">
+          <div class="action-button" id="touchPause">P</div>
+          <div class="action-button" id="touchRestart">R</div>
+        </div>
+      </div>
+
+      <!-- Tela inicial (overlay) -->
+      <div id="start-screen" class="overlay">
+        <h1>Jogo da Cobrinha</h1>
+        <p>Use setas / WASD / swipe (mobile). P / Esc para pausar. M para mute. Clique em Start.</p>
+        <div style="display:flex;gap:8px">
+          <button id="startBtn">Start</button>
+          <button id="howBtn" class="secondary">Como Jogar</button>
+        </div>
+        <div style="display:flex; gap:12px; margin-top:8px; align-items:center;">
+          <div id="leaderboard" aria-live="polite">
+            <strong>Top local</strong><div id="lb-list" class="small"></div>
+          </div>
+        </div>
+        <footer class="small">Preferências salvas localmente.</footer>
+      </div>
+
+      <!-- Overlay de mensagens temporárias (Game Over, Vitória, etc) -->
+      <div id="msg" class="overlay hidden"></div>
+    </div>
+  </div>
+
+  <!-- Script JavaScript com toda a lógica do jogo -->
+  <script>
+    /* Constantes de tamanho base do canvas (usado para cálculos de escala) */
+    const CSS_WIDTH = 800, CSS_HEIGHT = 600;
+
+    /* Referências a elementos do DOM */
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d', {alpha:false}); // Contexto 2D sem transparência
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const highscoreEl = document.getElementById('highscore');
+    const startScreen = document.getElementById('start-screen');
+    const startBtn = document.getElementById('startBtn');
+    const howBtn = document.getElementById('howBtn');
+    const msg = document.getElementById('msg');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const speedRange = document.getElementById('speedRange');
+    const volRange = document.getElementById('volRange');
+    const lbList = document.getElementById('lb-list');
+
+    /* Referências aos botões touch */
+    const touchPauseBtn = document.getElementById('touchPause');
+    const touchRestartBtn = document.getElementById('touchRestart');
+    const dpadUp = document.querySelector('.d-pad-up');
+    const dpadDown = document.querySelector('.d-pad-down');
+    const dpadLeft = document.querySelector('.d-pad-left');
+    const dpadRight = document.querySelector('.d-pad-right');
+
+    /* Chaves para armazenamento local (localStorage) */
+    const STORAGE = {
+      HS: 'snake_highscore_v2',      // Recorde
+      PREF: 'snake_prefs_v1',        // Preferências (volume, mute, velocidade)
+      LB: 'snake_leaderboard_v1',    // Leaderboard (placar)
+    };
+
+    /* Objeto de preferências do usuário */
+    let prefs = { 
+      muted: false,        // Áudio mutado?
+      volume: 0.6,         // Volume (0 a 1)
+      baseFPS: 10          // Velocidade base (frames por segundo)
+    };
+
+    /* Variáveis de jogo */
+    let SCALE = 20;        // Tamanho de cada quadrado da grade
+    let COLS, ROWS;        // Número de colunas e linhas do grid
+    let snake = [];        // Array de segmentos da cobra (cada segmento = {x,y})
+    let dir = {x:0,y:0},   // Direção atual da cobra
+        nextDir = {x:0,y:0}; // Próxima direção (para evitar colisão com a própria cauda)
+    let food = {x:0,y:0};  // Posição da comida
+    let score = 0,         // Pontuação atual
+        lives = 3,         // Vidas restantes
+        highscore = 0;     // Melhor pontuação
+    let running = false;   // Jogo em execução?
+    let invincibleUntil = 0; // Tempo até o fim da invencibilidade (após perder vida)
+    let lastTimestamp = 0; // Último timestamp da animação
+
+    /* Fixed timestep (para atualizações consistentes independentes do FPS) */
+    let accumulator = 0;   // Acumulador de tempo
+    let timestep = 1000/10; // Intervalo de tempo entre updates (em ms)
+
+    /* Canvas offscreen para desenhar o tabuleiro de xadrez (otimização) */
+    let bgCanvas, bgCtx;
+
+    /* Sons do jogo */
+    let bgMusic, eatSound, gameOverSound, winSound;
+
+    /* Leaderboard (array de objetos {score, date}) */
+    let leaderboard = [];
+
+    /* =======================
+       Funções de Utilidade
+       ======================= */
+
+    /* Gera número inteiro aleatório entre min e max (inclusivo) */
+    function randInt(min,max){ 
+      return Math.floor(Math.random()*(max-min+1))+min; 
+    }
+
+    /* Retorna timestamp atual em milissegundos */
+    function now(){ 
+      return performance.now(); 
+    }
+
+    /* Salva preferências no localStorage */
+    function savePrefs(){ 
+      localStorage.setItem(STORAGE.PREF, JSON.stringify(prefs)); 
+    }
+
+    /* Carrega preferências do localStorage */
+    function loadPrefs(){ 
+      try{ 
+        const p = JSON.parse(localStorage.getItem(STORAGE.PREF)); 
+        if(p) prefs = {...prefs, ...p}; // Mescla com defaults
+      }catch(e){} // Ignora erros
+    }
+
+    /* Carrega recorde do localStorage */
+    function loadHS(){ 
+      highscore = +localStorage.getItem(STORAGE.HS) || 0; 
+      highscoreEl.textContent = highscore; 
+    }
+
+    /* Salva recorde no localStorage */
+    function saveHS(){ 
+      localStorage.setItem(STORAGE.HS, highscore); 
+      highscoreEl.textContent = highscore; 
+    }
+
+    /* Carrega leaderboard do localStorage */
+    function loadLeaderboard(){ 
+      try{ 
+        leaderboard = JSON.parse(localStorage.getItem(STORAGE.LB))||[]; 
+      }catch(e){ 
+        leaderboard=[]; 
+      } 
+      renderLeaderboard(); 
+    }
+
+    /* Salva leaderboard no localStorage */
+    function saveLeaderboard(){ 
+      localStorage.setItem(STORAGE.LB, JSON.stringify(leaderboard)); 
+      renderLeaderboard(); 
+    }
+
+    /* Adiciona nova pontuação ao leaderboard e mantém top 10 */
+    function addToLeaderboard(scoreVal){ 
+      leaderboard.push({score:scoreVal, date:(new Date()).toISOString()});
+      leaderboard.sort((a,b)=>b.score-a.score); // Ordena decrescente
+      leaderboard = leaderboard.slice(0,10);     // Mantém apenas top 10
+      saveLeaderboard(); 
+    }
+
+    /* =======================
+       Configuração do Canvas (Responsivo)
+       ======================= */
+
+    /* Ajusta tamanho do canvas com base na largura da tela e densidade de pixels */
+    function setupCanvas(){
+      const dpr = window.devicePixelRatio || 1; // Densidade de pixels do dispositivo
+      
+      // Calcula largura máxima (respeitando margens laterais)
+      const maxWidth = Math.min(CSS_WIDTH, window.innerWidth - 40);
+      const aspectRatio = CSS_HEIGHT / CSS_WIDTH; // Proporção original
+      const calculatedHeight = maxWidth * aspectRatio; // Altura proporcional
+      
+      // Aplica estilos CSS
+      canvas.style.width = maxWidth + 'px';
+      canvas.style.height = calculatedHeight + 'px';
+      
+      // Define tamanho real do canvas (considerando densidade de pixels)
+      canvas.width = Math.floor(maxWidth * dpr);
+      canvas.height = Math.floor(calculatedHeight * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0); // Escala o contexto para renderizar corretamente
+      
+      // Recalcula grid com base no novo tamanho
+      SCALE = 20 * (maxWidth / CSS_WIDTH); // Escala proporcional
+      COLS = Math.floor(maxWidth / SCALE);
+      ROWS = Math.floor(calculatedHeight / SCALE);
+      
+      // Cria canvas offscreen para o tabuleiro
+      bgCanvas = document.createElement('canvas');
+      bgCanvas.width = maxWidth;
+      bgCanvas.height = calculatedHeight;
+      bgCtx = bgCanvas.getContext('2d');
+      drawChessboardToCache(); // Desenha o tabuleiro uma vez
+    }
+
+    /* Desenha o tabuleiro de xadrez (alternando cores) no canvas offscreen */
+    function drawChessboardToCache(){
+      const s = SCALE;
+      for(let y=0;y<ROWS;y++){
+        for(let x=0;x<COLS;x++){
+          bgCtx.fillStyle=(x+y)%2===0?'#f9f2e7':'#eee1c6'; // Cores alternadas
+          bgCtx.fillRect(x*s, y*s, s, s);
+        }
+      }
+    }
+
+    /* =======================
+       Configuração de Áudio
+       ======================= */
+
+    /* Inicializa os sons do jogo */
+    function setupAudio(){
+      bgMusic = new Audio('snak.mp3'); 
+      bgMusic.loop = true; 
+      bgMusic.volume = prefs.volume;
+      
+      // Sons de efeito (URLs públicas)
+      eatSound = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg  '); 
+      eatSound.volume = 1.0;
+      gameOverSound = new Audio('https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg  '); 
+      gameOverSound.volume = 1.0;
+      winSound = new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg  '); 
+      winSound.volume = 1.0;
+      
+      applyAudioPrefs(); // Aplica preferências de volume/mute
+      
+      // Preload e tratamento de erros
+      [bgMusic,eatSound,gameOverSound,winSound].forEach(a=>{
+        a.preload = 'auto';
+        a.addEventListener('error', ()=>{});
+      });
+    }
+
+    /* Aplica preferências de áudio (volume e mute) */
+    function applyAudioPrefs(){
+      try{
+        const vol = +prefs.volume;
+        // Ajusta volume dos sons de efeito
+        [eatSound,gameOverSound,winSound].forEach(s=>s.volume = Math.min(1, Math.max(0, vol)));
+        // Ajusta volume da música (mais baixo)
+        if(bgMusic) bgMusic.volume = vol * 0.6;
+        updateMuteButton(); // Atualiza texto do botão
+      }catch(e){}
+    }
+
+    /* Reproduz um som (se não estiver mutado) */
+    function playSound(snd){
+      if(prefs.muted) return; // Não toca se mutado
+      try{ 
+        snd.currentTime = 0; 
+        snd.play().catch(()=>{}); // Ignora erros de reprodução
+      }catch(e){}
+    }
+
+    /* =======================
+       Lógica do Jogo
+       ======================= */
+
+    const INITIAL_LIVES = 3;   // Vidas iniciais
+    const POINTS_PER_FOOD = 10; // Pontos por comida
+
+    /* Reinicia a cobra (posição inicial) */
+    function resetSnake(){
+      snake = [];
+      const startX = Math.floor(COLS/2);
+      const startY = Math.floor(ROWS/2);
+      // Cria 4 segmentos iniciais (cabeça + corpo)
+      for(let i=0;i<4;i++) snake.push({x:startX-i, y:startY});
+      dir = {x:1,y:0};     // Começa indo para a direita
+      nextDir = {x:1,y:0};
+    }
+
+    /* Gera comida em posição aleatória (não sobre a cobra) */
+    function spawnFood(){
+      let tries=0;
+      do{
+        food.x = randInt(0,COLS-1);
+        food.y = randInt(0,ROWS-1);
+        tries++;
+        if(tries>2000) break; // Evita loop infinito
+      }while(snake.some(s=>s.x===food.x && s.y===food.y)); // Verifica colisão com cobra
+    }
+
+    /* Atualiza estado do jogo (movimento, colisões, crescimento) */
+    function update(){
+      // Evita que a cobra vire na direção oposta (colisão com si mesma)
+      if(!(nextDir.x === -dir.x && nextDir.y === -dir.y)) dir = nextDir;
+      
+      // Calcula nova cabeça
+      const newHead = {x:snake[0].x + dir.x, y:snake[0].y + dir.y};
+      
+      // Verifica colisão com paredes ou com o próprio corpo
+      const outOfBounds = newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS;
+      const collidedWithSelf = snake.some(s=>s.x===newHead.x && s.y===newHead.y);
+      
+      // Se colidiu e não está invencível, perde vida
+      if((outOfBounds || collidedWithSelf) && now() > invincibleUntil){
+        loseLife();
+        return;
+      }
+      
+      // Adiciona nova cabeça
+      snake.unshift(newHead);
+      
+      // Se comeu comida
+      if(newHead.x === food.x && newHead.y === food.y){
+        score += POINTS_PER_FOOD;
+        scoreEl.textContent = score;
+        playSound(eatSound); // Toca som
+        try{ navigator.vibrate && navigator.vibrate(40); }catch(e){} // Vibração (mobile)
+        spawnFood(); // Gera nova comida
       } else {
-        ctx.moveTo(px + SCALE, py); ctx.lineTo(px, py + SCALE); // Diagonal /
+        snake.pop(); // Remove cauda (se não comeu)
       }
-      ctx.stroke(); // Desenha padrão
+      
+      // Verifica vitória (cobra preenche quase todo o tabuleiro)
+      if(snake.length >= COLS*ROWS - 1){
+        handleWin();
+      }
     }
-  }
 
-  // invincibility visual // Efeito visual de invencibilidade
-  if(now() < invincibleUntil){ // Se está invencível
-    ctx.fillStyle = 'rgba(255,255,255,0.06)'; // Camada semi-transparente
-    ctx.fillRect(0,0,CSS_WIDTH,CSS_HEIGHT); // Sobrepoe toda a tela
-  }
-}
-
-/* small message helpers */ // Auxiliares de mensagem
-function showTempMessage(text, duration=900, cb){ // Mensagem temporária
-  msg.textContent = text; msg.classList.remove('hidden'); // Mostra mensagem
-  setTimeout(()=>{ msg.classList.add('hidden'); if(cb) cb(); }, duration); // Esconde após duração
-}
-function showMessage(text, isWin=false){ // Mensagem persistente
-  msg.innerHTML = `<div><strong>${isWin?'Vitória':'Game Over'}</strong><br>${text}<br><small id="restart-hint">Clica / Pressione para recomeçar</small></div>`; // Conteúdo da mensagem
-  msg.classList.remove('hidden'); // Mostra mensagem
-  msg.addEventListener('click', restartMatch, {once:true}); // Click para recomeçar
-}
-
-/* =======================
-   Game Loop (fixed timestep)
-   ======================= */
-function gameLoop(timestamp){ // Loop principal do jogo
-  if(!lastTimestamp) lastTimestamp = timestamp; // Inicializa último timestamp
-  const delta = timestamp - lastTimestamp; // Calcula delta time
-  lastTimestamp = timestamp; // Atualiza último timestamp
-  if(!running){ render(0); requestAnimationFrame(gameLoop); return; } // Se pausado, apenas renderiza
-
-  // update animation toggles // Atualiza estados de animação
-  animTimer = Math.floor(timestamp / 200); // Temporizador de animação
-  blinkState = Math.floor(timestamp / 600) % 2 === 0; // Piscar a cada 600ms
-  mouthOpen = Math.floor(timestamp / 400) % 2 === 0; // Abrir/fechar boca a cada 400ms
-
-  // accumulate dt, update in fixed steps // Acumula tempo, atualiza em steps fixos
-  accumulator += delta; // Acumula delta
-  const maxSteps = 5; // safety clamp // Limite de segurança
-  let steps = 0; // Contador de steps
-  while(accumulator >= timestep && steps < 12){ // Executa steps de física
-    update(); // Atualiza física
-    accumulator -= timestep; // Subtrai tempo do acumulador
-    steps++; // Incrementa contador
-  }
-
-  const interp = accumulator / timestep; // Interpolação para renderização suave
-  render(interp); // Renderiza frame
-  requestAnimationFrame(gameLoop); // Agenda próximo frame
-}
-
-/* =======================
-   Controls & Events
-   ======================= */
-function startGame(){ // Inicia jogo
-  startScreen.classList.add('hidden'); msg.classList.add('hidden'); // Esconde telas
-  score = 0; lives = INITIAL_LIVES; // Reinicia pontuação e vidas
-  scoreEl.textContent = score; livesEl.textContent = lives; // Atualiza exibições
-  loadHS(); loadLeaderboard(); // Carrega recorde e placar
-  resetSnake(); spawnFood(); // Reinicia cobra e comida
-  invincibleUntil = 0; // Remove invencibilidade
-  // set FPS from slider
-  prefs.baseFPS = +speedRange.value; // Define FPS base do controle
-  timestep = 1000 / prefs.baseFPS; // Calcula timestep
-  running = true; lastTimestamp = 0; accumulator = 0; // Inicia estado do jogo
-  // attempt to play music (user gesture)
-  if(!prefs.muted){ // Se não está mudo
-    try{ bgMusic.currentTime = 0; bgMusic.play().catch(()=>{}); }catch(e){} // Toca música
-  }
-  requestAnimationFrame(gameLoop); // Inicia loop
-}
-
-function restartMatch(){ // Reinicia partida
-  msg.classList.add('hidden'); // Esconde mensagem
-  resetSnake(); spawnFood(); // Reinicia cobra e comida
-  score = 0; lives = INITIAL_LIVES; // Reinicia pontuação e vidas
-  scoreEl.textContent = score; livesEl.textContent = lives; // Atualiza exibições
-  invincibleUntil = 0; // Remove invencibilidade
-  prefs.baseFPS = +speedRange.value; timestep = 1000 / prefs.baseFPS; // Atualiza velocidade
-  running = true; lastTimestamp = 0; accumulator = 0; // Reinicia estado
-  if(!prefs.muted){ try{ bgMusic.currentTime = 0; bgMusic.play().catch(()=>{}); }catch(e){} } // Toca música se não mudo
-}
-
-function togglePause(){ // Alterna pausa
-  running = !running; // Inverte estado de execução
-  pauseBtn.textContent = running ? 'Pausar(Clique P)' : 'Retomar(Clique P)'; // Atualiza texto do botão
-  if(!running) showTempMessage('Pausado', 700); // Mensagem de pausado
-  else showTempMessage('Retomando', 500); // Mensagem de retomando
-}
-
-function updateMuteButton(){ // Atualiza botão de mudo
-  muteBtn.textContent = prefs.muted ? 'Música: Off' : 'Música: On'; // Atualiza texto
-  document.body.classList.toggle('muted', prefs.muted); // Aplica classe CSS
-}
-
-/* keyboard */ // Eventos de teclado
-window.addEventListener('keydown', (e)=>{
-  if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){ togglePause(); } // Pausa com P/Esc
-  if(e.key === 'm' || e.key === 'M'){ prefs.muted = !prefs.muted; applyAudioPrefs(); savePrefs(); updateMuteButton(); if(prefs.muted) bgMusic.pause(); else { try{ bgMusic.play().catch(()=>{}); }catch(e){} } } // Mute com M
-  if(e.key === 'r' || e.key === 'R'){ restartMatch(); } // Reinicia com R
-  // movement // Movimento
-  if(['ArrowUp','w','W'].includes(e.key)){ if(dir.y!==1) nextDir = {x:0,y:-1}; } // Cima
-  if(['ArrowDown','s','S'].includes(e.key)){ if(dir.y!==-1) nextDir = {x:0,y:1}; } // Baixo
-  if(['ArrowLeft','a','A'].includes(e.key)){ if(dir.x!==1) nextDir = {x:-1,y:0}; } // Esquerda
-  if(['ArrowRight','d','D'].includes(e.key)){ if(dir.x!==-1) nextDir = {x:1,y:0}; } // Direita
-});
-
-/* pause when visibility lost */ // Pausa quando a aba perde visibilidade
-document.addEventListener('visibilitychange', ()=>{
-  if(document.hidden && running){ running = false; pauseBtn.textContent = 'Retomar'; showTempMessage('Pausado (aba oculta)', 700); } // Pausa se aba oculta
-});
-
-/* button handlers */ // Manipuladores de botões
-pauseBtn.addEventListener('click', togglePause); // Botão de pausa
-startBtn.addEventListener('click', ()=>{ startGame(); }); // Botão de iniciar
-howBtn.addEventListener('click', ()=>{ showTempMessage('Setas/WASD para mover. Swipe no celular. P/Esc para pausar. M para mutar.', 2200); }); // Botão de ajuda
-
-muteBtn.addEventListener('click', ()=>{ // Botão de mudo
-  prefs.muted = !prefs.muted; savePrefs(); applyAudioPrefs(); // Alterna mudo e salva
-  if(prefs.muted) { try{ bgMusic.pause(); }catch(e){} } // Pausa música se mudo
-  else { try{ bgMusic.play().catch(()=>{}); }catch(e){} } // Toca música se não mudo
-  updateMuteButton(); // Atualiza botão
-});
-
-/* sliders */ // Controles deslizantes
-speedRange.addEventListener('input', ()=>{ // Controle de velocidade
-  prefs.baseFPS = +speedRange.value; // Atualiza FPS
-  timestep = 1000 / prefs.baseFPS; // Recalcula timestep
-  savePrefs(); // Salva preferências
-});
-volRange.addEventListener('input', ()=>{ // Controle de volume
-  prefs.volume = +volRange.value; // Atualiza volume
-  savePrefs(); // Salva preferências
-  applyAudioPrefs(); // Aplica preferências de áudio
-});
-
-/* click on overlay to restart */ // Click na overlay para reiniciar
-msg.addEventListener('click', ()=>{ restartMatch(); });
-
-/* touch swipe controls */ // Controles de toque (swipe)
-let touchStart = null; // Ponto inicial do toque
-window.addEventListener('touchstart', (e)=>{ // Início do toque
-  const t = e.touches[0]; // Primeiro toque
-  touchStart = {x:t.clientX, y:t.clientY, t:now()}; // Salva posição e tempo
-});
-window.addEventListener('touchmove', (e)=>{ // Movimento do toque
-  if(!touchStart) return; // Ignora se não há início registrado
-  const t = e.touches[0]; // Primeiro toque
-  const dx = t.clientX - touchStart.x; // Delta X
-  const dy = t.clientY - touchStart.y; // Delta Y
-  if(Math.abs(dx) > 30 || Math.abs(dy) > 30){ // Se movimento significativo
-    if(Math.abs(dx) > Math.abs(dy)){ // Se movimento horizontal predominante
-      if(dx > 0 && dir.x !== -1) nextDir = {x:1,y:0}; // Swipe direita
-      if(dx < 0 && dir.x !== 1) nextDir = {x:-1,y:0}; // Swipe esquerda
-    } else { // Movimento vertical predominante
-      if(dy > 0 && dir.y !== -1) nextDir = {x:0,y:1}; // Swipe baixo
-      if(dy < 0 && dir.y !== 1) nextDir = {x:0,y:-1}; // Swipe cima
+    /* Lida com perda de vida */
+    function loseLife(){
+      running = false; // Pausa jogo
+      lives--;         // Diminui vida
+      livesEl.textContent = lives; // Atualiza HUD
+      playSound(gameOverSound); // Toca som
+      
+      if(lives > 0){
+        // Mostra mensagem e reinicia após 1 segundo
+        showTempMessage(`Você perdeu uma vida! Vidas: ${lives}`, 1000, ()=>{
+          resetSnake(); 
+          spawnFood();
+          invincibleUntil = now() + 1500; // Invencibilidade por 1.5s
+          running = true;
+        });
+      } else {
+        // Game Over
+        if(score > highscore){ 
+          highscore = score; 
+          saveHS(); // Salva novo recorde
+        }
+        addToLeaderboard(score); // Adiciona ao placar
+        showMessage(`Game Over! Pontos: ${score}`, false);
+      }
     }
-    touchStart = null; // Reseta toque
-  }
-});
 
-/* keyboard focus: prevent arrow keys scrolling */ // Previne scroll com teclas de seta
-window.addEventListener('keydown', e=>{
-  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); // Previne comportamento padrão
-});
+    /* Lida com vitória */
+    function handleWin(){
+      running = false;
+      playSound(winSound);
+      if(score > highscore){ 
+        highscore = score; 
+        saveHS(); 
+      }
+      addToLeaderboard(score);
+      showMessage(`Você venceu! Pontos: ${score}`, true);
+    }
 
-/* =======================
-   Leaderboard UI
-   ======================= */
-function renderLeaderboard(){ // Renderiza placar de líderes
-  lbList.innerHTML = ''; // Limpa placar
-  if(!leaderboard || leaderboard.length===0){ lbList.innerHTML = '<div class="small">Nenhum score ainda.</div>'; return;} // Mensagem se vazio
-  leaderboard.forEach((r,i)=>{ // Para cada entrada
-    const d = new Date(r.date); // Data do score
-    lbList.innerHTML += `<div style="padding:4px 0">${i+1}. <strong>${r.score}</strong> <span class="small" style="opacity:0.7">(${d.toLocaleString()})</span></div>`; // Adiciona entrada
-  });
-}
+    /* =======================
+       Renderização
+       ======================= */
 
-/* =======================
-   Init & Boot
-   ======================= */
-function init(){ // Inicialização
-  loadPrefs(); loadHS(); loadLeaderboard(); // Carrega preferências, recorde e placar
-  setupCanvas(); // Configura canvas
-  setupAudio(); // Configura áudio
-  // apply prefs to UI
-  volRange.value = prefs.volume; // Aplica volume às UI
-  speedRange.value = prefs.baseFPS || 10; // Aplica velocidade às UI
-  updateMuteButton(); // Atualiza botão de mudo
-  applyAudioPrefs(); // Aplica preferências de áudio
+    let blinkState = true;   // Estado de piscar dos olhos
+    let mouthOpen = true;    // Boca aberta/fechada
+    let animTimer = 0;       // Contador para animações
 
-  // initial board & snake
-  resetSnake(); spawnFood(); // Inicializa cobra e comida
-  render(0); // Renderiza frame inicial
+    /* Renderiza um frame do jogo */
+    function render(interp){
+      // Desenha tabuleiro de fundo
+      ctx.drawImage(bgCanvas, 0, 0, canvas.style.width.replace('px', ''), canvas.style.height.replace('px', ''));
 
-  // animate even when not running so overlay looks alive
-  requestAnimationFrame(gameLoop); // Inicia loop de animação
-}
+      // Desenha comida (círculo vermelho com detalhes)
+      const fx = food.x * SCALE + SCALE/2;
+      const fy = food.y * SCALE + SCALE/2;
+      ctx.fillStyle = '#ff4c4c';
+      ctx.beginPath(); 
+      ctx.arc(fx, fy, SCALE*0.4, 0, Math.PI*2); 
+      ctx.fill();
+      ctx.strokeStyle = '#2b5d34'; 
+      ctx.lineWidth = 2;
+      ctx.beginPath(); 
+      ctx.moveTo(fx, fy - SCALE*0.4); 
+      ctx.lineTo(fx, fy - SCALE*0.6); 
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(fx - SCALE*0.15, fy - SCALE*0.15, SCALE*0.1, 0, Math.PI*2); 
+      ctx.fill();
 
-/* start */ // Início
-init(); // Chama inicialização
+      // Desenha cobra
+      for(let i=0;i<snake.length;i++){
+        const part = snake[i];
+        const px = part.x * SCALE;
+        const py = part.y * SCALE;
+        
+        if(i === 0){ // Cabeça
+          ctx.fillStyle = '#9fffa3';
+          ctx.fillRect(px, py, SCALE, SCALE);
+          ctx.fillStyle = '#000';
+          // Olhos (pisca)
+          if(blinkState){
+            ctx.fillRect(px + 4, py + 4, 3, 3);
+            ctx.fillRect(px + SCALE - 7, py + 4, 3, 3);
+          }
+          // Boca (abre/fecha)
+          ctx.fillRect(px + 6, py + SCALE - (mouthOpen?7:6), 4, 1);
+          // Sombra inferior
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(px, py + SCALE - 2, SCALE, 2);
+        } else { // Corpo
+          ctx.fillStyle = '#28a745';
+          ctx.fillRect(px, py, SCALE, SCALE);
+          ctx.strokeStyle = '#1c7c32';
+          ctx.beginPath();
+          // Padrão de listras diagonais (animação)
+          if((i + animTimer) % 2 === 0){
+            ctx.moveTo(px, py); 
+            ctx.lineTo(px + SCALE, py + SCALE);
+          } else {
+            ctx.moveTo(px + SCALE, py); 
+            ctx.lineTo(px, py + SCALE);
+          }
+          ctx.stroke();
+        }
+      }
 
-/* on window resize, recalc canvas */ // Ao redimensionar janela, recalcula canvas
-window.addEventListener('resize', ()=>{
-  // keep CSS size constant but we could recompute; for simplicity reload
-  setupCanvas(); drawChessboardToCache(); render(0); // Recria canvas e renderiza
-});
+      // Efeito de invencibilidade (sobreposição branca translúcida)
+      if(now() < invincibleUntil){
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(0,0,canvas.style.width.replace('px', ''),canvas.style.height.replace('px', ''));
+      }
+    }
 
-</script>
+    /* =======================
+       Mensagens na Tela
+       ======================= */
+
+    /* Mostra mensagem temporária (desaparece após X ms) */
+    function showTempMessage(text, duration=900, cb){
+      msg.textContent = text; 
+      msg.classList.remove('hidden');
+      setTimeout(()=>{ 
+        msg.classList.add('hidden'); 
+        if(cb) cb(); // Callback opcional
+      }, duration);
+    }
+
+    /* Mostra mensagem permanente (até clique) */
+    function showMessage(text, isWin=false){
+      msg.innerHTML = `<div><strong>${isWin?'Vitória':'Game Over'}</strong><br>${text}<br><small id="restart-hint">Clica / Pressione para recomeçar</small></div>`;
+      msg.classList.remove('hidden');
+      // Adiciona evento de clique (reinicia jogo) - apenas uma vez
+      msg.addEventListener('click', restartMatch, {once:true});
+    }
+
+    /* =======================
+       Loop Principal do Jogo (Fixed Timestep)
+       ======================= */
+
+    /* Loop de jogo (chamado por requestAnimationFrame) */
+    function gameLoop(timestamp){
+      // Inicializa lastTimestamp
+      if(!lastTimestamp) lastTimestamp = timestamp;
+      const delta = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+      
+      // Se jogo não está rodando, apenas renderiza e agenda próximo frame
+      if(!running){ 
+        render(0); 
+        requestAnimationFrame(gameLoop); 
+        return; 
+      }
+
+      // Atualiza contadores de animação
+      animTimer = Math.floor(timestamp / 200);
+      blinkState = Math.floor(timestamp / 600) % 2 === 0;
+      mouthOpen = Math.floor(timestamp / 400) % 2 === 0;
+
+      // Acumula tempo e executa updates
+      accumulator += delta;
+      const maxSteps = 5; // Limite de updates por frame (evita "spiral of death")
+      let steps = 0;
+      while(accumulator >= timestep && steps < 12){
+        update();           // Atualiza lógica do jogo
+        accumulator -= timestep;
+        steps++;
+      }
+
+      // Renderiza com interpolação (suavização)
+      const interp = accumulator / timestep;
+      render(interp);
+      requestAnimationFrame(gameLoop); // Agenda próximo frame
+    }
+
+    /* =======================
+       Controles e Eventos (incluindo Touch)
+       ======================= */
+
+    /* Inicia novo jogo */
+    function startGame(){
+      startScreen.classList.add('hidden'); // Esconde tela inicial
+      msg.classList.add('hidden');
+      score = 0; 
+      lives = INITIAL_LIVES;
+      scoreEl.textContent = score; 
+      livesEl.textContent = lives;
+      loadHS(); 
+      loadLeaderboard();
+      resetSnake(); 
+      spawnFood();
+      invincibleUntil = 0;
+      prefs.baseFPS = +speedRange.value;
+      timestep = 1000 / prefs.baseFPS; // Ajusta velocidade
+      running = true; 
+      lastTimestamp = 0; 
+      accumulator = 0;
+      // Toca música se não estiver mutado
+      if(!prefs.muted){
+        try{ 
+          bgMusic.currentTime = 0; 
+          bgMusic.play().catch(()=>{}); 
+        }catch(e){}
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    /* Reinicia jogo após Game Over ou Vitória */
+    function restartMatch(){
+      msg.classList.add('hidden');
+      resetSnake(); 
+      spawnFood();
+      score = 0; 
+      lives = INITIAL_LIVES;
+      scoreEl.textContent = score; 
+      livesEl.textContent = lives;
+      invincibleUntil = 0;
+      prefs.baseFPS = +speedRange.value; 
+      timestep = 1000 / prefs.baseFPS;
+      running = true; 
+      lastTimestamp = 0; 
+      accumulator = 0;
+      if(!prefs.muted){ 
+        try{ 
+          bgMusic.currentTime = 0; 
+          bgMusic.play().catch(()=>{}); 
+        }catch(e){} 
+      }
+    }
+
+    /* Alterna pausa */
+    function togglePause(){
+      running = !running;
+      pauseBtn.textContent = running ? 'Pausar(Clique P ou Esc)' : 'Retomar(Clique P ou Esc)';
+      if(!running) showTempMessage('Pausado', 700);
+      else showTempMessage('Retomando', 500);
+    }
+
+    /* Atualiza texto do botão de mute */
+    function updateMuteButton(){
+      muteBtn.textContent = prefs.muted ? 'Música: Off' : 'Música: On';
+      document.body.classList.toggle('muted', prefs.muted);
+    }
+
+    /* =======================
+       Controles por Teclado
+       ======================= */
+
+    window.addEventListener('keydown', (e)=>{
+      if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){ 
+        togglePause(); 
+      }
+      if(e.key === 'm' || e.key === 'M'){ 
+        prefs.muted = !prefs.muted; 
+        applyAudioPrefs(); 
+        savePrefs(); 
+        updateMuteButton(); 
+        if(prefs.muted) bgMusic.pause(); 
+        else { 
+          try{ 
+            bgMusic.play().catch(()=>{}); 
+          }catch(e){} 
+        } 
+      }
+      if(e.key === 'r' || e.key === 'R'){ 
+        restartMatch(); 
+      }
+      // Controles de movimento (setas e WASD)
+      if(['ArrowUp','w','W'].includes(e.key)){ 
+        if(dir.y!==1) nextDir = {x:0,y:-1}; 
+      }
+      if(['ArrowDown','s','S'].includes(e.key)){ 
+        if(dir.y!==-1) nextDir = {x:0,y:1}; 
+      }
+      if(['ArrowLeft','a','A'].includes(e.key)){ 
+        if(dir.x!==1) nextDir = {x:-1,y:0}; 
+      }
+      if(['ArrowRight','d','D'].includes(e.key)){ 
+        if(dir.x!==-1) nextDir = {x:1,y:0}; 
+      }
+    });
+
+    /* Pausa jogo quando aba perde foco */
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.hidden && running){ 
+        running = false; 
+        pauseBtn.textContent = 'Retomar'; 
+        showTempMessage('Pausado (aba oculta)', 700); 
+      }
+    });
+
+    /* =======================
+       Eventos de Botões
+       ======================= */
+
+    pauseBtn.addEventListener('click', togglePause);
+    startBtn.addEventListener('click', ()=>{ startGame(); });
+    howBtn.addEventListener('click', ()=>{ 
+      showTempMessage('Setas/WASD para mover. Swipe no celular. P/Esc para pausar. M para mutar.', 2200); 
+    });
+
+    muteBtn.addEventListener('click', ()=>{
+      prefs.muted = !prefs.muted; 
+      savePrefs(); 
+      applyAudioPrefs();
+      if(prefs.muted) { 
+        try{ 
+          bgMusic.pause(); 
+        }catch(e){} 
+      }
+      else { 
+        try{ 
+          bgMusic.play().catch(()=>{}); 
+        }catch(e){} 
+      }
+      updateMuteButton();
+    });
+
+    /* Sliders (velocidade e volume) */
+    speedRange.addEventListener('input', ()=>{
+      prefs.baseFPS = +speedRange.value;
+      timestep = 1000 / prefs.baseFPS;
+      savePrefs();
+    });
+
+    volRange.addEventListener('input', ()=>{
+      prefs.volume = +volRange.value;
+      savePrefs();
+      applyAudioPrefs();
+    });
+
+    /* Clique na mensagem (Game Over/Vitória) reinicia jogo */
+    msg.addEventListener('click', ()=>{ restartMatch(); });
+
+    /* =======================
+       Controles Touch (Swipe)
+       ======================= */
+
+    let touchStart = null;
+    window.addEventListener('touchstart', (e)=>{
+      const t = e.touches[0];
+      touchStart = {x:t.clientX, y:t.clientY, t:now()};
+    });
+
+    window.addEventListener('touchmove', (e)=>{
+      if(!touchStart) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchStart.x;
+      const dy = t.clientY - touchStart.y;
+      // Se movimento for significativo (>30px)
+      if(Math.abs(dx) > 30 || Math.abs(dy) > 30){
+        if(Math.abs(dx) > Math.abs(dy)){ // Movimento horizontal
+          if(dx > 0 && dir.x !== -1) nextDir = {x:1,y:0};
+          if(dx < 0 && dir.x !== 1) nextDir = {x:-1,y:0};
+        } else { // Movimento vertical
+          if(dy > 0 && dir.y !== -1) nextDir = {x:0,y:1};
+          if(dy < 0 && dir.y !== 1) nextDir = {x:0,y:-1};
+        }
+        touchStart = null; // Reseta para evitar múltiplos comandos
+      }
+    });
+
+    /* Previne scroll com setas e espaço */
+    window.addEventListener('keydown', e=>{
+      if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) 
+        e.preventDefault();
+    });
+
+    /* =======================
+       Controles Touch (Botões Virtuais)
+       ======================= */
+
+    // Cada botão do D-Pad e ações
+    dpadUp.addEventListener('touchstart', (e) => {
+      e.preventDefault(); // Previne comportamento padrão
+      if(dir.y !== 1) nextDir = {x:0,y:-1}; // Sobe
+    });
+
+    dpadDown.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if(dir.y !== -1) nextDir = {x:0,y:1}; // Desce
+    });
+
+    dpadLeft.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if(dir.x !== 1) nextDir = {x:-1,y:0}; // Esquerda
+    });
+
+    dpadRight.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if(dir.x !== -1) nextDir = {x:1,y:0}; // Direita
+    });
+
+    touchPauseBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      togglePause(); // Pausa/retoma
+    });
+
+    touchRestartBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      restartMatch(); // Reinicia jogo
+    });
+
+    // Previne eventos padrão em todos os elementos touch
+    const allTouchElements = document.querySelectorAll('.d-pad-button, .action-button');
+    allTouchElements.forEach(el => {
+      el.addEventListener('touchstart', e => e.preventDefault());
+      el.addEventListener('touchend', e => e.preventDefault());
+    });
+
+    /* =======================
+       Leaderboard (Placar)
+       ======================= */
+
+    /* Renderiza o placar na tela */
+    function renderLeaderboard(){
+      lbList.innerHTML = '';
+      if(!leaderboard || leaderboard.length===0){ 
+        lbList.innerHTML = '<div class="small">Nenhum score ainda.</div>'; 
+        return;
+      }
+      leaderboard.forEach((r,i)=>{
+        const d = new Date(r.date);
+        lbList.innerHTML += `<div style="padding:4px 0">${i+1}. <strong>${r.score}</strong> <span class="small" style="opacity:0.7">(${d.toLocaleString()})</span></div>`;
+      });
+    }
+
+    /* =======================
+       Inicialização
+       ======================= */
+
+    /* Função de inicialização (carrega preferências, configura canvas, etc) */
+    function init(){
+      loadPrefs(); 
+      loadHS(); 
+      loadLeaderboard();
+      setupCanvas();
+      setupAudio();
+      volRange.value = prefs.volume;
+      speedRange.value = prefs.baseFPS || 10;
+      updateMuteButton();
+      applyAudioPrefs();
+
+      resetSnake(); 
+      spawnFood();
+      render(0); // Renderiza frame inicial
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    /* Inicia o jogo */
+    init();
+
+    /* Ajusta canvas ao redimensionar janela */
+    window.addEventListener('resize', ()=>{
+      setupCanvas(); 
+      drawChessboardToCache(); 
+      render(0);
+    });
+
+  </script>
 </body>
 </html>
