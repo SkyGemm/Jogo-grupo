@@ -44,7 +44,7 @@
       <div class="hud-item">Vidas: <span id="lives">3</span></div> <!-- Exibição de vidas -->
       <div class="hud-item">Recorde: <span id="highscore">0</span></div> <!-- Exibição de recorde -->
       <div class="controls"> <!-- Controles do jogo -->
-        <button id="pauseBtn" class="secondary">Pausar</button> <!-- Botão de pausa -->
+        <button id="pauseBtn" class="secondary">Pausar(Clique P ou Esc)</button> <!-- Botão de pausa -->
         <button id="muteBtn">Música: On</button> <!-- Botão de mudo -->
         <div class="settings-panel"> <!-- Controle de velocidade -->
           <label class="small">Velocidade</label>
@@ -421,7 +421,7 @@ function restartMatch(){ // Reinicia partida
 
 function togglePause(){ // Alterna pausa
   running = !running; // Inverte estado de execução
-  pauseBtn.textContent = running ? 'Pausar' : 'Retomar'; // Atualiza texto do botão
+  pauseBtn.textContent = running ? 'Pausar(Clique P)' : 'Retomar(Clique P)'; // Atualiza texto do botão
   if(!running) showTempMessage('Pausado', 700); // Mensagem de pausado
   else showTempMessage('Retomando', 500); // Mensagem de retomando
 }
